@@ -1,6 +1,6 @@
 'use strict';
 
-require('dotenv').config();
+// require('dotenv').config();
 
 /**
  * Require the dependencies
@@ -11,20 +11,22 @@ const express = require('express');
 const app = express();
 const path = require('path');
 const OAuthClient = require('intuit-oauth');
-const bodyParser = require('body-parser');
-const ngrok = process.env.NGROK_ENABLED === 'true' ? require('ngrok') : null;
+const db = require('./db/models.js');
+
+// const bodyParser = require('body-parser');
+// const ngrok = process.env.NGROK_ENABLED === 'true' ? require('ngrok') : null;
 
 /**
  * Configure View and Handlebars
  */
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '/public')));
 app.engine('html', require('ejs').renderFile);
 
 app.set('view engine', 'html');
-app.use(bodyParser.json());
+app.use(express.json());
 
-const urlencodedParser = bodyParser.urlencoded({ extended: false });
+// const urlencodedParser = express.urlencoded({ extended: false });
 
 /**
  * App Variables
@@ -43,14 +45,14 @@ let oauthClient = null;
 /**
  * Home Route
  */
-app.get('/', function (req, res) {
+app.get('/', function (_req, res) {
   res.render('index');
 });
 
 /**
  * Get the AuthorizeUri
  */
-app.get('/authUri', urlencodedParser, function (req, res) {
+app.get('/authUri', function (req, res) {
   oauthClient = new OAuthClient({
     clientId: req.query.json.clientId,
     clientSecret: req.query.json.clientSecret,
@@ -85,6 +87,7 @@ app.get('/callback', function (req, res) {
  * Display the token : CAUTION : JUST for sample purposes
  */
 app.get('/retrieveToken', function (req, res) {
+  console.log(oauth2_token_json);
   res.send(oauth2_token_json);
 });
 
@@ -109,6 +112,7 @@ app.get('/refreshAccessToken', function (req, res) {
  */
 app.get('/getCompanyInfo', function (req, res) {
   const companyID = oauthClient.getToken().realmId;
+  console.log(companyID);
 
   const url =
     oauthClient.environment == 'sandbox'
@@ -127,12 +131,44 @@ app.get('/getCompanyInfo', function (req, res) {
 });
 
 /**
+ * getPnL ()
+ */
+app.get('/getPnL', function (req, res) {
+  const companyID = oauthClient.getToken().realmId;
+  // console.log(companyID);
+
+  const url =
+    oauthClient.environment == 'sandbox'
+      ? OAuthClient.environment.sandbox
+      : OAuthClient.environment.production;
+
+  oauthClient
+    .makeApiCall({
+      url: `${url}v3/company/${companyID}/reports/ProfitAndLoss?summarize_column_by=Month&accounting_method=Accrual&start_date=2018-01-31&end_date`,
+    })
+    .then(function (authResponse) {
+      // console.log('body is: ', typeof authResponse.response.body);
+      let results = JSON.parse(authResponse.response.body);
+      // console.log(results);
+      db.create(results);
+      console.log('saved in db');
+    })
+    // .then(function (authResponse) {
+    //   console.log(`The response for API call is :${JSON.stringify(authResponse)}`);
+    //   res.send(JSON.parse(authResponse.text()));
+    // })
+    .catch(function (e) {
+      console.error(e);
+    });
+});
+
+/**
  * disconnect ()
  */
 app.get('/disconnect', function (req, res) {
   console.log('The disconnect called ');
   const authUri = oauthClient.authorizeUri({
-    scope: [OAuthClient.scopes.OpenId, OAuthClient.scopes.Email],
+    scope: [scopes.OpenId, scopes.Email],
     state: 'intuit-test',
   });
   res.redirect(authUri);
@@ -141,49 +177,49 @@ app.get('/disconnect', function (req, res) {
 /**
  * Start server on HTTP (will use ngrok for HTTPS forwarding)
  */
-const server = app.listen(process.env.PORT || 8000, () => {
+const server = app.listen(process.env.PORT || 8888, () => {
   console.log(`💻 Server listening on port ${server.address().port}`);
-  if (!ngrok) {
-    redirectUri = `${server.address().port}` + '/callback';
-    console.log(
-      `💳  Step 1 : Paste this URL in your browser : ` +
-        'http://localhost:' +
-        `${server.address().port}`,
-    );
-    console.log(
-      '💳  Step 2 : Copy and Paste the clientId and clientSecret from : https://developer.intuit.com',
-    );
-    console.log(
-      `💳  Step 3 : Copy Paste this callback URL into redirectURI :` +
-        'http://localhost:' +
-        `${server.address().port}` +
-        '/callback',
-    );
-    console.log(
-      `💻  Step 4 : Make Sure this redirect URI is also listed under the Redirect URIs on your app in : https://developer.intuit.com`,
-    );
-  }
+  // if (!ngrok) {
+  redirectUri = `${server.address().port}` + '/callback';
+  console.log(
+    `💳  Step 1 : Paste this URL in your browser : ` +
+      'http://localhost:' +
+      `${server.address().port}`,
+  );
+  console.log(
+    '💳  Step 2 : Copy and Paste the clientId and clientSecret from : https://developer.intuit.com',
+  );
+  console.log(
+    `💳  Step 3 : Copy Paste this callback URL into redirectURI :` +
+      'http://localhost:' +
+      `${server.address().port}` +
+      '/callback',
+  );
+  console.log(
+    `💻  Step 4 : Make Sure this redirect URI is also listed under the Redirect URIs on your app in : https://developer.intuit.com`
+  );
+  // }
 });
 
 /**
  * Optional : If NGROK is enabled
  */
-if (ngrok) {
-  console.log('NGROK Enabled');
-  ngrok
-    .connect({ addr: process.env.PORT || 8000 })
-    .then((url) => {
-      redirectUri = `${url}/callback`;
-      console.log(`💳 Step 1 : Paste this URL in your browser :  ${url}`);
-      console.log(
-        '💳 Step 2 : Copy and Paste the clientId and clientSecret from : https://developer.intuit.com',
-      );
-      console.log(`💳 Step 3 : Copy Paste this callback URL into redirectURI :  ${redirectUri}`);
-      console.log(
-        `💻 Step 4 : Make Sure this redirect URI is also listed under the Redirect URIs on your app in : https://developer.intuit.com`,
-      );
-    })
-    .catch(() => {
-      process.exit(1);
-    });
-}
+// if (ngrok) {
+//   console.log('NGROK Enabled');
+//   ngrok
+//     .connect({ addr: process.env.PORT || 8000 })
+//     .then((url) => {
+//       redirectUri = `${url}/callback`;
+//       console.log(`💳 Step 1 : Paste this URL in your browser :  ${url}`);
+//       console.log(
+//         '💳 Step 2 : Copy and Paste the clientId and clientSecret from : https://developer.intuit.com',
+//       );
+//       console.log(`💳 Step 3 : Copy Paste this callback URL into redirectURI :  ${redirectUri}`);
+//       console.log(
+//         `💻 Step 4 : Make Sure this redirect URI is also listed under the Redirect URIs on your app in : https://developer.intuit.com`,
+//       );
+//     })
+//     .catch(() => {
+//       process.exit(1);
+//     });
+// }

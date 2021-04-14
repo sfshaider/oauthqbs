@@ -57,6 +57,7 @@
     <p>If there is no access token or the access token is invalid, click either the <b>Connect to QucikBooks</b> or <b>Sign with Intuit</b> button above.</p>
     <pre id="apiCall"></pre>
     <button  type="button" id="makeAPICall" class="btn btn-success">Get Company Info</button>
+    <button  type="button" id="makeAPICall2" class="btn btn-success">Get PnL</button>
 
     <hr />
 
@@ -133,6 +134,14 @@
             });
         }
 
+        function makeAPICall2() {
+
+            // Generate the authUri
+            $.get('/getPnL', function (response) {
+                $("#apiCall").html(JSON.stringify(response, null, 4));
+            });
+            }
+
         document.getElementById('authorizeUri').addEventListener('click', function response(e) {
             e.preventDefault();
             authorizeUri();
@@ -151,6 +160,11 @@
         document.getElementById('makeAPICall').addEventListener('click', function response(e) {
             e.preventDefault();
             makeAPICall();
+        });
+
+        document.getElementById('makeAPICall2').addEventListener('click', function response(e) {
+            e.preventDefault();
+            makeAPICall2();
         });
 
     })();
